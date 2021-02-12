@@ -1,0 +1,347 @@
+<meta charset="UTF-8">
+<html>
+<head>
+<link rel="stylesheet" href="./js/bootstrap-5.0.0-beta1-dist/css/bootstrap.min.css">
+<script src="./js/jquery/jquery-3.5.1.min.js"></script>
+<script src="./js/bootstrap-5.0.0-beta1-dist/js/bootstrap.min.js"></script>
+</head>
+<body>
+<div class="container">
+<div class="jumbotron text-center">
+  <h3>GBIF checker</h3>
+    <p>List taxa</p>
+</div>
+<div class="row">
+	<div class="row">
+    <div class="col-md-4">
+		<div class="col-md-12"><input class="col-md-12" id="download_tab" type="button" value="Download as tab-delimited"></input></div>
+	    <div class="col-md-12"><input class="col-md-12" id="download_html" type="button" value="Download as HTML Table (microdata)"></input></div>
+	</div>
+	</div>
+</div>
+<div class="row">
+    <div class="row">
+    <div class="col-md-4">
+		<div class="col-md-12"><a name="result"/><a id="check_all" href="#result">Check all</a></div>
+		<div class="col-md-12"><a id="uncheck_all" href="#result">Uncheck all</a></div>
+	</div>
+	</div>
+</div>
+<div class="row" >
+	<div>
+		<ul  id="list_result" class="list-group list-group-flush">
+		</ul>
+	</div>
+</div>
+</div>
+</body>
+<script>
+var global_rank;
+var global_name;
+var array_keys=Array();
+var results_parent=Array();
+var results_children={};
+
+function getParameterByName(name, url = window.location.href) {
+    name = name.replace(/[\[\]]/g, '\\$&');
+    var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)'),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, ' '));
+}
+async function copySomething(text) {
+		  try {
+			const toCopy = text || location.href;
+			await navigator.clipboard.writeText(toCopy);
+			//console.log('Text or Page URL copied');
+		  }
+		  catch (err) {
+			console.error('Failed to copy: ', err);
+		  }
+		}
+		
+var download_content = function(content, fileName, mimeType) {
+  var a = document.createElement('a');
+  mimeType = mimeType || 'application/octet-stream';
+
+  if (navigator.msSaveBlob) { // IE10
+    navigator.msSaveBlob(new Blob([content], {
+      type: mimeType
+    }), fileName);
+  } else if (URL && 'download' in a) { //html5 A[download]
+    a.href = URL.createObjectURL(new Blob([content], {
+      type: mimeType
+    }));
+    a.setAttribute('download', fileName);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } else {
+    location.href = 'data:application/octet-stream,' + encodeURIComponent(content); // only this mime type is supported
+  }
+}
+$(document).on('click', '.get_name', function(){
+			// what you want to happen when mouseover and mouseout 
+			// occurs on elements that match '.dosomething'
+			
+			var name_ctrl=$(this).siblings( ".val_clip" )[0];		
+			var copyText = $(name_ctrl).val()
+
+		  /* Select the text field */
+		   copySomething(copyText);
+
+		 
+				});
+				
+$(document).on('click','.taxa_check', function(){
+			console.log("CHECK");
+            var id=$(this).attr('id');
+			var num_id=id.replace("checkbox_","");
+			console.log(num_id);
+		    var checked=$('#' + id).is(":checked");
+			console.log(checked);
+				$.each(results_children, function(key, val)
+				{
+					results_children[key][num_id]["rbins_checked"]=checked;
+				});
+			});
+				
+$(document).ready(
+	function()
+	{
+	
+	        $("#download_tab").click(
+				function()
+				{
+				
+				   let tab="\t";
+				   let content=""
+				   
+				   content="gbif_usage_key"+tab+"parent_name"+tab+ "status" + tab + "synonym" ;
+				   
+				   $.each(results_parent, function(key, val)
+				   {
+				       
+							content=content+"\r\n";
+							content=content+val["usageKey"]+ tab + val["scientificName"]+ tab + val["status"]+ tab + val["synonym"];
+							content=content+"\r\n\r\ngbif_usage_key"+tab+"name"+tab+ "status" + tab + "synonym" ;
+							$.each(results_children[val["usageKey"]], function( key2, val2 ) {
+								if(val2["rbins_checked"]===true)
+								{
+									content=content+"\r\n";
+									content=content+val2["key"]+ tab + val2["scientificName"]+ tab + val2["taxonomicStatus"]+ tab + val2["synonym"];
+								}
+							});
+						
+				   }
+				   );				   
+					download_content(content, global_name+'.csv', 'text/csv;encoding:utf-8');				
+				}
+			);
+			
+			$("#download_html").click(
+				function()
+				{
+				
+				   
+				   let content=""
+				   
+				   content="<table><tr><th>gbif_usage_key</th><th>rank</th><th>name</th><th>status</th></tr>" ;
+				   
+				   $.each(results_parent, function(key, val)
+				   {
+				       
+							content=content+"\r\n";
+							var status="accepted";
+							if(val["synonym"]==true)
+							{
+								status="homotypic synonym";
+							}
+							else if(val["status"].toLowerCase()!="status")
+							{
+								status=val["status"].toLowerCase();
+							}
+							content=content+'<tr itemscope itemtype="http://rs.tdwg.org/dwc/terms/Taxon"><td itemprop="taxonID">'+val["usageKey"]+ '</td><td itemprop="taxonRank">'+val["rank"]+ '</td><td itemprop="scientificName">' + val["scientificName"]+ '</td><td itemprop="taxonomicStatus">' + val["status"]+ '</td></tr>';
+							
+							$.each(results_children[val["usageKey"]], function( key2, val2 ) {
+								if(val2["rbins_checked"]===true)
+								{
+									content=content+"\r\n";
+									content=content+'<tr itemscope itemtype="http://rs.tdwg.org/dwc/terms/Taxon"><td itemprop="taxonID">'+val2["key"]+ '</td><td itemprop="taxonRank">'+val2["rank"]+ '</td><td itemprop="scientificName">' + val2["scientificName"]+ '</td><td itemprop="taxonomicStatus">' + val2["status"]+ '</td></tr>';
+								}
+							});
+						
+				   });	
+					content=content+"</table>";				   
+					download_content(content, global_name+'.html', 'text/html;encoding:utf-8');				
+				}
+			);
+	        var to_children=function(parent_key, checked)
+			{
+	
+			    //console.log($("#taxon").val());
+				//console.log("proceed");
+				
+				var url="https://api.gbif.org/v1/species/"+parent_key+"/children?limit=1000";
+				$.getJSON( url, function( data ) {
+				  var items = [];
+				    $('#list_result_'+parent_key.toString()).empty();
+					//console.log(data);
+					var i=1;
+					if("results" in data)
+					{
+					
+					    results_children[parent_key]={};
+						var data_gbif=data["results"];
+						
+					    
+						
+						$.each( data_gbif, function( key, val ) {
+							 //console.log(val);
+							 val['rbins_checked']=checked;
+							 $("#list_result_"+ parent_key.toString()).append("<li><button type='button' class='gbif_name list-group-item list-group-item-action'><input type='checkbox' id='checkbox_"+val["key"]+"' class='taxa_check' checked> "+i+"<br/> GBIF identifier: <a target='_blank' href='https://www.gbif.org/species/"+val["key"]+"'>"+val["key"]+"</a><br/>"+val["scientificName"]+"&nbsp;<input type='button' class='get_name' value='clipboard'></input><input class='val_clip' type='hidden' value='"+val["scientificName"] +"'><br/>Rank: "+val["rank"]+"<br/>Status: "+val["taxonomicStatus"]+"<br>Synonym : "+val["synonym"]+"</button></li>");
+							 results_children[parent_key][val['key']]=val;
+						i++;
+						});
+					}
+				
+				 
+				  
+				});
+			
+			}
+	
+	        var fill_children=function(key, checked)
+			{
+			    console.log("my_key");
+				console.log(key);
+				to_children(key, checked);
+			}
+			
+			var fill_all_children=function()
+			{
+				$.each(array_keys, 
+					function(index, value)
+					{
+					     fill_children(value, true);
+					}
+								
+				);
+			}
+	
+	        var get_gbif=function(rank, taxon)
+			{
+			   
+			   var url_key='https://api.gbif.org/v1/species/match';
+			   $.getJSON( url_key, {name:taxon, rank:rank}, 
+				function(data)
+				{
+				    console.log(data);
+					console.log("done");
+					
+					if("usageKey" in data)
+					{
+						//console.log(data["rank"]);
+						if (data["rank"].toLowerCase()==rank.toLowerCase())
+						{
+						 array_keys.push(data["usageKey"]);
+						 results_parent.push(
+								{usageKey: data["usageKey"], 
+								scientificName: data["scientificName"],
+								status: data["status"],
+								synonym: data["synonym"]
+								}
+								);
+						}			
+					}
+					if("alternatives" in data )
+					{
+						var i=0;
+						$.each(data["alternatives"], function( index, value ) {
+						  //console.log( index + ": " + value["usageKey"] );
+						  //console.log(value["rank"]);
+						  if (value["rank"].toLowerCase()==rank.toLowerCase())
+							{
+							  array_keys.push(data["usageKey"]);
+							  results_parent.push(
+								{usageKey: value["usageKey"], 
+								scientificName: value["scientificName"],
+								status: data["status"],
+								synonym: data["synonym"]
+								}
+								);
+							  i++;
+							}
+						});
+					}
+					console.log(results_parent);
+					 $('#list_result').empty();
+					 
+					if(results_parent.length>0)
+					{
+						$.each( results_parent, function( key, val ) {
+					         console.log(key);
+							 console.log(val);
+							 $("#list_result").append("<li><button type='button' class='gbif_name list-group-item list-group-item-action'><p>Parent: </p>GBIF key : <a target='_blank' href='https://www.gbif.org/species/"+val["usageKey"]+"'>"+val["usageKey"]+"</a><br/>Name : "+val["scientificName"]+"<br/>Status : "+val["status"]+"<br/>Synonym : "+val["synonym"]+"</button><div class='container'><div class='row'><ul  id='list_result_"+val["usageKey"]+"' class='list-group list-group-flush'></ul></div></div></li>");
+						i++;
+						});
+						
+						fill_all_children();
+				    }
+					else
+					{
+						$("#list_result").append("<li><button type='button' class='gbif_name list-group-item list-group-item-action'>Nothing found</button></li>");
+					}
+				}
+			   );
+			}
+			
+	    $("#uncheck_all").click(
+			function()
+			{
+				$(".taxa_check").prop("checked", false);
+				$.each(results_children, function( key, val ) {
+					$.each(val, function( key2, val2 ) {
+						results_children[key][key2]["rbins_checked"]=false;
+					});
+							
+				});
+				$.each(results_children, function( key, val ) {
+					$.each(val, function( key2, val2 ) {
+						console.log(key2);
+						console.log(val2);
+						
+					});
+							
+				});
+				
+			}
+		);
+		
+		 $("#check_all").click(
+			function()
+			{
+				$(".taxa_check").prop("checked", true);
+				$.each(results_children, function( key, val ) {
+					console.log(key);
+					console.log(val);
+					$.each(val, function( key2, val2 ) {
+						results_children[key][key2]["rbins_checked"]=true;
+					});
+							
+				});
+			}
+		);
+		function init()
+		{		
+			var queryString = window.location.search;
+			global_rank=getParameterByName("rank");
+			global_name=getParameterByName("taxon");
+			get_gbif(global_rank, global_name);
+		}
+		init();
+	}
+);
+</script>
+</html>
