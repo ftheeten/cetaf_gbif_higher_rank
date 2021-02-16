@@ -338,6 +338,7 @@ $(document).ready(
 			var queryString = window.location.search;
 			global_rank=getParameterByName("rank");
 			global_name=getParameterByName("taxon");
+			global_name=global_name.charAt(0).toUpperCase() + global_name.substr(1).toLowerCase();
 			get_gbif(global_rank, global_name);
 		}
 		init();
